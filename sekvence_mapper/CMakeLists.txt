@@ -15,6 +15,7 @@ target_link_libraries(
     minimizers
     thread_pool
 )
+
 option(align_tests "Align tests" ON)
 if (align_tests)
     enable_testing()
@@ -24,6 +25,17 @@ if (align_tests)
     add_test(NAME align_test
             COMMAND align_test)
 endif()
+
+option(minimizer_tests "Minimizer tests" ON)
+if (minimizer_tests)
+    enable_testing()
+    find_package(GTest REQUIRED)
+    add_executable(minimizer_test tests/minimizer_tests.cpp)
+    target_link_libraries(minimizer_test PUBLIC minimizers GTest::Main)
+    add_test(NAME minimizer_test
+            COMMAND minimizer_test)
+endif()
+
 
 if (NOT TARGET thread_pool)
     add_subdirectory(thread_pool EXCLUDE_FROM_ALL)

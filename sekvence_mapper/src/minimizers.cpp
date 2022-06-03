@@ -2,14 +2,70 @@
 #include <vector>
 #include <tuple>
 #include <cstring>
+#include <string.h>
 #include <list>
 #include <iomanip>
 #include <sstream>
+using namespace std;
 
-unsigned int get_kmer_v(char* kmer, unsigned int kmer_len) {
-    unsigned int value = 0;
+tuple<unsigned int, unsigned int> find_min(vector<tuple<unsigned int, unsigned int>> kmer_vector){
+	tuple<unsigned int, unsigned int> minimizer;
+	for (auto i : kmer_vector ) {
+		
+    		if (i == kmer_vector.front()){
+    			minimizer=i;
+    		}
+    		else{
+    			if (i < minimizer){
+    				minimizer=i;
+    			}
+    		}
+    		
+    		//cout<< "Kmer " <<get<0>(i) << "poz " << get<1>(i) <<'\n';
+    		
+	}
+	
+	return minimizer;
+}
+
+string reverse_complement(const char* sequence, unsigned int sequence_len){
+	string rev;
+	for(int i = sequence_len; i >= 0; i--){
+		switch (sequence[i]) {
+		    case 'A':
+		        rev+='T';
+		        break;
+		    case 'C':
+		        rev+='G';
+		        break;
+		    case 'G':
+		        rev+='C';
+		        break;
+		    case 'T':
+		        rev+='A';
+		        break;
+		}
+	}
+	
+	return rev;
+}
+
+unsigned int kmer_mask(unsigned int window_len){
+	unsigned int mask=0;
+	for (int i = 0; i < window_len; i++){
+		if (i==0){
+			mask=(mask << 2) + 0;
+		}
+		else{
+			mask = (mask << 2) + 3;
+		}
+	}
+	return mask;
+}
+
+unsigned int get_kmer_v(const char* kmer, unsigned int kmer_len, unsigned int value) {
     unsigned int i = 0;
-
+	
     while (i < kmer_len) {
         switch (kmer[i]) {
             case 'A':
@@ -30,119 +86,101 @@ unsigned int get_kmer_v(char* kmer, unsigned int kmer_len) {
     return value;
 }
 
-using namespace std;
 
-std::vector<std::tuple<unsigned long int, unsigned int, bool>>
-Minimize(const char *sequence, unsigned int sequence_len, unsigned int kmer_len, unsigned int window_len)
+vector<tuple<unsigned int, unsigned int, bool>>
+Minimize(const char *sequence, unsigned int sequence_len, unsigned int kmer_len, unsigned int window_len, bool origin)
 {
+    string tr_seq;
+    if(origin == false){
     
-    vector<tuple<unsigned long int, unsigned int, bool>> v1;
-    vector<tuple<unsigned long int, unsigned int, bool>> v2;
-    char rev[sequence_len + 1];
-    rev[sequence_len] = '\0';
-
-    vector<tuple<unsigned long int, unsigned int, bool>> minimizers;
-
-
-    for (int i = sequence_len - 1; i >= 0; i--)
-        rev[sequence_len - 1 - i] = sequence[i];
-
-    for (int i = 0; i < sequence_len; i++)
-    {
-        if (rev[i] == '0')
-            rev[i] = '3';
-        else if (rev[i] == '3')
-            rev[i] = '0';
-        if (rev[i] == '1')
-            rev[i] = '2';
-        else if (rev[i] == '2')
-            rev[i] = '1';
+    	tr_seq = reverse_complement((sequence), sequence_len).c_str();
+    	
     }
-
+    else{
+    	tr_seq = (sequence);
+    }
+    
+    vector<tuple<unsigned int, unsigned int, bool>> minimizers{};
     unsigned int fract_len;
-    bool origin;
-
-    char* kmer = (char*) malloc(kmer_len);
+    fract_len = window_len + kmer_len -1;
+    vector<tuple<unsigned int, unsigned int>> kmer_vector;
     unsigned int kmer_value;
-    for (unsigned int i = 0; i < window_len - 1; i++) {
-        strncpy(kmer, sequence + i, kmer_len);
-        kmer_value = get_kmer_v(kmer, kmer_len);
-        origin = true;
-
-        if (i == 0 || kmer_value <= get<0>(minimizers.back())) {
-            minimizers.push_back(make_tuple(kmer_value, i, origin));
-        }
-    }
-
-    fract_len = window_len + kmer_len - 1;
-    for (unsigned int i = 0; i <= sequence_len - fract_len; i++) {
-        if(get<1>(minimizers.back()) >= 1) {
-            strncpy(kmer, sequence + i + fract_len - kmer_len, kmer_len);
-            kmer_value = get_kmer_v(kmer, kmer_len);
-            origin = true;
-
-            if (kmer_value <= get<0>(minimizers.back())) {
-                minimizers.push_back(make_tuple(kmer_value, i + fract_len - kmer_len, origin));
-            }
-        } else {
-            unsigned int min_value, min_position;
-            bool min_origin;
-
-            for (unsigned int j = 0; j <= fract_len - kmer_len; j++) {
-                strncpy(kmer, sequence + i + j, kmer_len);
-                kmer_value = get_kmer_v(kmer, kmer_len);
-                origin = true;
-
-                if (j == 0 || kmer_value < min_value) {
-                    min_value = kmer_value;
-                    min_position = j;
-                    min_origin = origin;
-                }
-            }
-            minimizers.push_back(make_tuple(min_value, min_position + i, min_origin));
-        }
-    }
-
-    for (unsigned int i = sequence_len - window_len - kmer_len + 2; i <= sequence_len - kmer_len; i++) {
-        if (get<1>(minimizers.back()) < i) {
-            unsigned int min_value, min_position;
-            bool min_origin;
-
-            for (unsigned int j = i; j <= sequence_len - kmer_len; j++) {
-                strncpy(kmer, sequence + j, kmer_len);
-                kmer_value = get_kmer_v(kmer, kmer_len);
-                origin = true;
-
-                if (j == i || kmer_value < min_value) {
-                    min_value = kmer_value;
-                    min_position = j;
-                    min_origin = origin;
-                }
-            }
-            minimizers.push_back(make_tuple(min_value, min_position, min_origin));
-        }
-
-
-    }
-    free(kmer);
+    tuple<unsigned int, unsigned int> minimizer;
+    int mask = kmer_mask(kmer_len);
+    
+    for(unsigned int i=0; i<= sequence_len-1; i++){
+    	int z=0;
+	int pomak = 0;
+    	if (i==0){
+    		
+        	kmer_value = get_kmer_v(&(tr_seq.c_str()[i]), kmer_len, 0);
+        	kmer_vector.push_back(make_tuple(kmer_value, i+1));
+    		minimizer=make_tuple(kmer_value, i+1);		
+    		z=1;
+    	}
+    	else if (i < window_len){
+    		
+    		int prev_kmer = get<0>(kmer_vector.back());
+    		prev_kmer = prev_kmer & mask;
+    		kmer_value = get_kmer_v(&(tr_seq.c_str()[i+kmer_len-1]) , 1, prev_kmer);
+    		kmer_vector.push_back(make_tuple(kmer_value, i+1));
+    		if (kmer_value < get<0>(minimizer)){
+    			minimizer= make_tuple(kmer_value, i+1);
+    			z=1;
+    		}
+    		//cout<<&(sequence[i+window_len-1])<<' ';
+    		//cout<<minimizer<<'\n';
+    		
+    	}
+    	else if (i <= sequence_len-kmer_len){
+    		tuple<unsigned int, unsigned int> pot_min = kmer_vector.front();
+    		int prev_kmer = get<0>(kmer_vector.back());
+    		
+    		prev_kmer = prev_kmer & mask;
+    		kmer_value = get_kmer_v(&(tr_seq.c_str()[i+kmer_len-1]) , 1, prev_kmer);
+    		kmer_vector.push_back(make_tuple(kmer_value, i+1));
+    		kmer_vector.erase(kmer_vector.begin());
+    		
+    		if (pot_min == minimizer){
+    			
+    			minimizer = find_min(kmer_vector);
+    			z=1;
+    			
+    			
+    		}
+    		else{
+	    		if (kmer_value < get<0>(minimizer)){
+	    			minimizer= make_tuple(kmer_value, i+1);
+	    			z=1;
+	    		}
+		}	
+    		
+    	}
+    	else{
+    		if (!kmer_vector.empty()){
+	    		tuple<unsigned int, unsigned int> pot_min = kmer_vector.front();
+	    		
+	    		kmer_vector.erase(kmer_vector.begin());
+	    		
+	    		if (pot_min == minimizer){
+	    			minimizer = find_min(kmer_vector);
+	    			
+	    			z=1;
+	    			
+	    		}
+    		}
+    		//cout<<&(sequence[i+window_len-1])<<' ';
+    		//cout<<minimizer<<'\n';
+    		
+    	}
+    	
+    	if(z==1){
+    		minimizers.push_back(make_tuple(get<0>(minimizer), get<1>(minimizer), origin));
+    	}
+    	
+    	
+    } 
+    
     return minimizers;
 }
-/*
-int main()
-{
-    unsigned int kmer_len = 15;
-    unsigned int window_len = 19;
-    vector<tuple<unsigned long int, unsigned int, bool>> v1 =
-    Minimize("TACGCATAAGCGCCAAAAGCACGCCGGGCGACCATAATGAGAAGATGCTCACCGCCAGCGTCAACAGTAAGTAGACGATGAGAGCGCCAGGGTAAACAGTTTGCACGGGCCGCGACGAAGGCAGTCGATAATGCCGCCATTGCTGGGATGCTCGCCCCCAGACGCGCATAGGCATAACCGGAAAACATCGCCACAATACCGCCAAAGCAAAGGCGACCCCAGGTCGAGGCTTCCATTAGCAATGCAGCCTGCCCCAGCAGCGCGAAGATCGCCGCCCCCACCATTGCCCCGGATTATCGATGGAAACGACGTTCCAGACCGCGGGTTTGTTACCGTTATTACCTTCCGTGTTTCATCATGTAATAGCAGCCCTTAGTAAACACGTTATAGCCGAAAAATTGCTTAGCGACCGATGCCACCATTTTTGACCGCGAACACTGTTGCCATCTTCGTCCAGCGGTGGTGAGAGAACGCGGCAATTCCCATCACTCCAGGGGACGACCACGCCAGAATACCGCCACCTACACCCGGTTTACGCCCGGTAAACCAACACGATACGCCCAGTCACCGGGAACATACCCAAGACTACAGCCCTTCCATCATCATTTCGTAAGAATGTACGGCACGTTGTCGGCCTGAAGAACGCGTTCCTGCGTCAACGATTCGCACACCACCTGCGCCGCGCTTGTCGCGCCAAGCGTTGCCAGTTCGCTACGTGGTCGAGGAGCCCTTGGAGCACTGACGGGTATACACGTCACAGGCTTCCCATTGCATCACAATAGAGATATCCGGCGGAGTAAGCAGCCAGGCTATGGCCCGGTTATGGAGACTTTATTTGTTTGTTCCGACTGGTTAACTTCGTCAGAGAGCGCTACCTGCTCGCCAGCAGTTTGCTTTGGATATGTAAATTCGCTGCCAGCGTTGTTCAACAGTTTTCAGCGTTAATCAGGCTATCTTAGGCAATAGCGCCAGGATAGATTCACCAGTGGCGGGAAATCGTTTGCCGCGGATGCAACTCTAAGGCGATAACTGAGTTACGGGGCAAGATCCGGTCGGGTCCCCACTAGGGATCTTTGTGTCGTACCGCCTGCGGGCCGCACATCTTCCAACGCAAGGGCTAACGTACAGAGACTTTCGAGATGGATTCCAGTGCAAAGCGTAATCACTGTCACCGCACTACGACGTTGCCATCGCGCAGTACACGATAGCCACTGCCGCCAGTTGACCTGGTACATTCGCCGAAGGGAATGTAATCGGGCATTTTGTCCGCCGTTAAGTGAGTGAGAAATTGGGTGTAAGCCTGATCTGTTACGGAATTGCCTGCTGTAATTTGTTTGCATCTAACAATATTTTCTTGTTAACTCCTTTTATAAGTCTCGGGAGGTAATTCCTCACCGGCTGGTGCCGATTTCAGGCATCCTGATTTAACTTAGCACCGGAGACTTAACTACAGGAAAACACAAAGAGATAAATGTCTAATCCTGATGCAAAAACTGCATCAGCAAATTTTTAATCTTTACGGACTTTTACCGCCTGGTTTATTAATTTCTTGACCTTCCCCTTGCTGAAGGTTTAACCTTTATCACAGCCAGTCAAAACCGTGTGTAAAGGGATGTTTATGTCAAACTATCGACCTGACCCTCTGGACGGCCTGTCTGCGGCGGTCACTGCGTTAAACGCGTGAAAGAAAGTCTTGAACAGCGTCGTCCGGGATGTTGAGCAGGCGGATGTGTCTATCACTGAAGCACGTTACCGGGACTGCCGAACAGGCTCGCTAAATTGAAACCATCAAACAAGCGGGTTATGACGCATCTGTAAGCCACCCAAAGGCTAAACCGCCACAGCCGTGACTGTTATGTT", 
-    1860, kmer_len, window_len);
-    for (int iter = 0; iter<v1.size(); iter++){
-        //for(int iter2 = 0; iter2 < 2;iter2++){
-            
-            cout << setw(kmer_len) << setfill('0') << get<0>(v1[iter]) << " ";
-            cout << get<1>(v1[iter]) << " ";
-            cout << get<2>(v1[iter]) << " ";
-            cout << endl;
-        //}
-    }
-}
-*/
+

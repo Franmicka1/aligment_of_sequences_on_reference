@@ -244,7 +244,12 @@ int Align(const char* query, unsigned int query_len,
         }
     }
     *cigar = get_cigar(res_row, res_column, V);
-
+    
+    
+    for (int i = 1; i <= query_len; i++) {
+    	delete [] V[i];
+    }
+    delete [] V;
     return align;   
 }
 

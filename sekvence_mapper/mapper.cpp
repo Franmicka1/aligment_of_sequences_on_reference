@@ -14,79 +14,25 @@
 #include "src/minimizers.h"
 #include <bits/stdc++.h>
 
-
 #include "bioparser/fasta_parser.hpp"
 #include "thread_pool/thread_pool.hpp"
 
-const int EPSILON = 100;
-
 using namespace std;
 
-int get_ceil_index(vector<tuple<bool, int, unsigned int>>& matches,
-                    vector<int>& T, int l, int r, int k) {
-    
-    while (r - l > 1) {
-        int m = l+ (r - l) / 2;
-        if (get<2>(matches[T[m]]) >= k) {
-            r = m;
-        } else {
-            l = m;
-        }
-    }
+//INICIJALIZACIJA
 
-
-    return r;
-                    }
-vector<tuple<bool, int,unsigned int>> longest_increasing_subsequence(vector<tuple<bool, int, unsigned int>>& matches,
-                                    vector<int>& tail_indices,
-                                    vector<int>& prev_indices) {   
-    
-    int len = 1;
-    
-    vector<tuple<bool, int, unsigned int>> result;
-    for (int i = 1; i < matches.size(); i++) {
-        if (get<2>(matches[i]) < get<2>(matches[tail_indices[0]])) {
-            tail_indices[0] = i;
-        }
-        else if (get<2>(matches[i]) > get<2>(matches[tail_indices[len - 1]])) {
-            prev_indices[i] = tail_indices[len - 1];
-            tail_indices[len++] = i;
-        } else {
-            int position = get_ceil_index(matches, tail_indices, -1, len - 1, get<2>(matches[i]));
-            cout << "\nPOZIIICIJA: " << position << "\n";
-            if (position == 0) {
-                prev_indices[i] = -1;
-            } else {
-                prev_indices[i] = tail_indices[position - 1];
-            }
-            tail_indices[position] = i;
-        }
-    }
-    vector<int> lis_ind;
-    lis_ind.reserve(len);
-    for (int i = tail_indices[len - 1]; i >= 0; i = prev_indices[i]) {
-        lis_ind.emplace_back(i);
-    }
-    reverse(lis_ind.begin(), lis_ind.end());
-    for (auto a : lis_ind) {
-        result.emplace_back(matches[a]);
-    }
-    
-    return result;
-
-}
 
 bool cigar_flag;
-int kmer_len = 10;
-int window_len = 15;
+int kmer_len = 15;
+int window_len = 5;
 double minimizer_freq = 0.001;
 int match_cost = 1;
 int mismatch_cost = - 1;
 int gap_cost = - 1;
-int thread_num = 1;
+int thread_num = 2;
 AlignmentType type = GLOBAL;
 int algorithm;
-bool optimize = false;
+bool optimize = true;
 
 static std::string HELP = "-h or --help for help\n"
                           "-v or --version for version\n"
@@ -113,44 +59,132 @@ public:
     std::string names, all_data;
 };
 
-void make_minimizer_index(const std::unique_ptr<Sequence> &sequence,
-                          std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> &index)
-{
-    
-    std::vector<std::tuple<unsigned int, unsigned int, bool>> minimizers = Minimize(sequence->all_data.c_str(),
-                                                                                    sequence->all_data.size(), kmer_len, window_len);
-    
-    //cout << "velicina minimizera: " << minimizers.size() << "\n";
-    if (minimizers.size() > kmer_len * window_len) return;
-    for (auto minimizer : minimizers)
-    {
-        //cout << "minimizer: " << std::get<0>(minimizer) << "\n";
-        
 
+//POCETAK FUNCKIJA
 
-        index[std::get<0>(minimizer)].emplace_back(std::make_pair(std::get<1>(minimizer), std::get<2>(minimizer)));
-        
+vector<tuple<bool, int,unsigned int>> longest_increasing_subsequence(vector<tuple<bool, unsigned int, unsigned int>>& matches) {
+
+    int N = matches.size();
+    int X[N];   
+    auto itr = 0;
+    for (auto e : matches){
+    	X[itr] = get<2>(e);
+    	++itr;
+    	
     }
-    //cout << "prosao sam petlju...\n";
+    int P[N];
+    int M[N + 1];
+    int L = 0;
+    int lo, hi, mid, newL;
+    for (int i=0; i < N; i++){
+    	lo = 1;
+    	hi = L + 1;
+    	while (lo < hi){
+    	    mid = lo + floor((hi-lo)/2);
+    	    if (X[M[mid]] < X[i]){
+    	    	lo = mid + 1;
+    	    }
+    	    else{
+    	    	hi = mid;
+    	    }
+    	}
+    	newL = lo;
+    	
+    	P[i] = M[newL - 1];
+    	M[newL] = i;
+    	
+    	if (newL > L){
+    		L = newL;
+    	}
     
+    }
+    vector<tuple<bool, int,unsigned int>> result;
+    int k = M[L];
+    for (int i=L-1; i > 0; i--){
+    	if (result.empty()){
+    		result.push_back(matches[k]);
+    	}
+    	
+    	if ((int(get<1>(result.back()))- int(get<1>(matches[k]))) < 5000){
+    		result.push_back(matches[k]);
+    	}
+    	else{
+    		result.pop_back();
+    	}
+    	
+    	k = P[k];
+    }
+    
+    int cnt1=0, cnt2 = 0;
+    if(!result.empty()){
+	     for(auto i:result){
+	     	if (get<0>(i)==1){
+	     		cnt1+=1;
+	     	}
+	     	else cnt2+=1;
+	     }
+	     if (cnt1 > cnt2){
+	     	for (int i=0; i <= cnt2; i++){
+	     		result.pop_back();
+	     	}
+	     }
+	     else {
+	     	for (int i=0; i <= cnt1; i++){
+	     		result.erase(result.begin());
+	     	}
+	     }
+	     //cout << cnt1 << "   " <<cnt2 << "\n";
+    }
+    return result;
+
 }
 
-std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> remove_frequent_minimizers(std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> &index,
-                                                                                                        int skip, std::vector<std::pair<unsigned int, unsigned int>> min_occ)
+
+/*string reverse_complement(const char* sequence, unsigned int sequence_len){
+	string rev;
+	for(int i = sequence_len; i >= 0; i--){
+		switch (sequence[i]) {
+		    case 'A':
+		        rev+='T';
+		        break;
+		    case 'C':
+		        rev+='G';
+		        break;
+		    case 'G':
+		        rev+='C';
+		        break;
+		    case 'T':
+		        rev+='A';
+		        break;
+		}
+	}
+	
+	return rev;
+}
+*/
+void make_minimizer_index(const std::unique_ptr<Sequence> &sequence,
+                          std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> &index,
+                          bool origin)
 {
-    for (int i = 0; i < skip; i++)
-    {
-        index.erase(min_occ[i].second);
-    }
-    return index;
+    
+    std::vector<std::tuple<unsigned int, unsigned int, bool>> minimizers = 
+    Minimize(sequence->all_data.c_str(),sequence->all_data.size(), kmer_len, window_len, origin);
+    
+    for (auto minimizer : minimizers)
+    { 
+        index[std::get<0>(minimizer)].emplace_back(std::make_pair(std::get<1>(minimizer), std::get<2>(minimizer)));
+        
+    }        
 }
 
 void make_reference_index(const std::unique_ptr<Sequence> &sequence,
                           std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> &index)
 {
     cerr << "Making reference index...\n"; 
-    make_minimizer_index(sequence, index);
-    
+    bool origin = true;
+    make_minimizer_index(sequence, index, origin);
+    origin = false;
+    make_minimizer_index(sequence, index, origin);
     std::vector<std::pair<unsigned int, unsigned int>> min_occ;
     min_occ.reserve(index.size());
     int num_singl = 0;
@@ -163,9 +197,9 @@ void make_reference_index(const std::unique_ptr<Sequence> &sequence,
         min_occ.emplace_back(std::make_pair(i.second.size(), i.first));
     }
     cerr << "Sorting minimizers by occurence...\n";
-    std::sort(min_occ.begin(), min_occ.end(), std::greater<std::pair<unsigned int, unsigned int>>());
-    size_t skip = std::ceil(index.size() * minimizer_freq);
-
+    sort(min_occ.begin(), min_occ.end(), std::greater<std::pair<unsigned int, unsigned int>>());
+    size_t skip = ceil(index.size() * minimizer_freq);
+    
     int index_size = index.size();
     if (skip >= index_size)
     {
@@ -174,99 +208,54 @@ void make_reference_index(const std::unique_ptr<Sequence> &sequence,
 
     cerr << "Number of distinct minimizers: " << index.size() << "\n";
     cerr << "Fraction of singletons: " << ((double) num_singl / index.size()) << "\n"; 
-    cerr << "NUmber of occurences of the most frequent minimizers with top " << minimizer_freq * 100 << "% most frequent ignored: " << min_occ[skip].first << "\n";
-
+    cerr << "NUmber of occurences of the most frequent minimizers with top " << minimizer_freq * 100 << "% most frequent ignored: " << skip << "\n";
+    
     for (int i = 0; i < skip; i++) {
         index.erase(min_occ[i].second);
     }
-    //index = remove_frequent_minimizers(index, skip, min_occ);
-}
-bool compare_matches(const tuple<bool, int, unsigned int>& a1, const tuple<bool, int, unsigned int>& a2) {
-    if (get<0>(a1) != get<0>(a2)) {
-        return !get<0>(a1);
-    } else {
-        if (get<1>(a1) != get<1>(a2)) {
-            return get<1>(a1) < get<1>(a2);
-        } else {
-            return get<2>(a1) < get<2>(a2);
-        }
-    }
+    
+    
 }
 
 void best_match_cluster(unordered_map<unsigned int, vector<pair<unsigned int, bool>>>& fragment_index,
                         unordered_map<unsigned int, vector<pair<unsigned int, bool>>>& reference_index,
-                        vector<tuple<bool, int, unsigned int>>& match_cluster) {
+                        vector<tuple<bool, int, unsigned int>>& result) {
 
-    //vector<tuple<bool, unsigned int, int>> result;
         
-    vector<tuple<bool, int, unsigned int>> matches;
+    vector<tuple<bool, unsigned int, unsigned int>> matches;
     for (auto e : fragment_index) {
         if (reference_index.count(e.first) != 0) {
             for (auto location : e.second) {
                 for (auto r_location : reference_index[e.first]) {
-                    bool strand = location.second ^ r_location.second;
-                    int rel_pos;
-                    if (strand) {
-                        rel_pos = location.first + r_location.first;
-                    } else {
-                        rel_pos = location.first - r_location.first;
-                    }
-                    matches.emplace_back(make_tuple(strand, rel_pos, r_location.first));
+                   
+                    matches.emplace_back(make_tuple(r_location.second , r_location.first, location.first));
                 }
             }
         }
     }
-    
     if (!matches.empty()) {
-        sort(matches.begin(), matches.end(), compare_matches);
-        vector<tuple<bool, int, unsigned int>> current_cluster;
-        int max = 0;
-        current_cluster.emplace_back(matches[0]);
-        for (int i = 1; i <= int(matches.size()); i++) {
-            if (i == int(matches.size()) || get<0>(matches[i]) != get<0>(matches[i - 1]) || get<1>(matches[i]) - get<1>(matches[i - 1]) >= EPSILON) {
-                vector<int> list_ind;
-                int n = int(current_cluster.size());
-                vector<int> tail_indices(n, 0);
-                vector<int> prev_indices(n, -1);
-                current_cluster = longest_increasing_subsequence(current_cluster, tail_indices, prev_indices);
-                
-                
-
-            }
-        }
+        sort(matches.begin(), matches.end());
+        result = longest_increasing_subsequence(matches);
+    	/*for (auto i: result){
+    	    
+    	    cout << get<1>(i)<< " : " << get<2>(i) << " - "<< get<0>(i) <<'\t';
+    	}
+    	*/	
     }
     
-                        }
-
-string map_frags_to_ref(const vector<unique_ptr<Sequence>>& fragments,
-                        const unique_ptr<Sequence>& reference,
-                        unordered_map<unsigned int, vector<pair<unsigned int, bool>>>& reference_index, int frag_begin, int frag_end) {
-
-    string res = "";
-    for (int i = frag_begin; i < frag_end; i++) {
-        unordered_map<unsigned int, vector<pair<unsigned int, bool>>> fragment_index;
-        make_minimizer_index(fragments[i], fragment_index);
-        vector<tuple<bool, int, unsigned int>> match_cluster;
-        best_match_cluster(fragment_index, reference_index, match_cluster);
-        string paf = "";
-        res = paf;
-    }             
-    
-    return res;           
-
 }
 
-
 string paf_format(const unique_ptr<Sequence>& reference, 
-const unique_ptr<Sequence>& fragment, unsigned int target_origin ,bool origin, string* cigar){
+const unique_ptr<Sequence>& fragment, vector<tuple<bool, int, unsigned int>> result, string* cigar){
     
-    string result;
+    string paf = "";
+    
     int tr_broj = 0;
     int ukuZb = 0; 
     int matchZb = 0;
     
     
-    
+    /*
     for (char& i : *cigar){
         
         if (isdigit(i)){
@@ -279,29 +268,56 @@ const unique_ptr<Sequence>& fragment, unsigned int target_origin ,bool origin, s
             }
             tr_broj=0;
         }
+    }*/
+    
+    if (result.size()<=5){
+    	paf += "Skipping fragment: ";
+    	paf += (fragment->names.c_str());
+    	paf += '\t';
+    	paf += to_string(fragment->all_data.size()); 
+    	paf += " because not enough matches were found.\n";
+    	return paf;
     }
-    result = "";
     
-    result += reference->names.c_str();
-    result += '\t';
-
-    result += to_string(reference->all_data.size());
-    result += '\t';
-    result += '\n';
+    paf += fragment->names.c_str();
+    paf += '\t';
+    paf += to_string(fragment->all_data.size());
+    paf += '\t';
+    paf += to_string(get<2>(result[result.size()-1]));
+    paf += '\t';
+    paf += to_string(get<2>(result[0]));
+    paf += '\t';
+    if(get<0>(result[1]) == 0){
+    	paf += "-";
+    	paf += '\t';
+    	paf += reference->names.c_str();
+	paf += '\t';
+	paf += to_string(reference->all_data.size());
+	paf += '\t';
+	paf += to_string(reference->all_data.size() - get<1>(result[0]));
+	paf += '\t';
+	paf += to_string(reference->all_data.size() - get<1>(result[result.size()-1]));
+	
+	
+    }
+    else{
+    	paf += "+";
+    	paf += '\t';
+    	paf += reference->names.c_str();
+    	paf += '\t';
+    	paf += to_string(reference->all_data.size());
+    	paf += '\t';
+    	paf += to_string(get<1>(result[result.size()-1]));
+    	paf += '\t';
+    	paf += to_string(get<1>(result[0]));
+    }
     
-    result += fragment->names.c_str();
-    result += '\t';
-    result += to_string(fragment->all_data.size());
-    result += '\t';
+    
+    paf += '\n';
     
     
-    result += to_string(target_origin);
-    result += '\t';
-    if (origin == true) result += "+";
-    else result += "-";
-    result += '\t';
     
-
+    /*
     result += to_string(matchZb);
     result += '\t';
     result += to_string(ukuZb);
@@ -311,14 +327,120 @@ const unique_ptr<Sequence>& fragment, unsigned int target_origin ,bool origin, s
         result += "cg:Z";
         result += *cigar;
     }
-    
-    result += '\n'; 
-    
+    */
 
-    //result = "sdfsdf";
-    
-    return result;
+    return paf;
 }
+
+
+void ispis_opcenito(std::vector<unique_ptr<Sequence>> &fragments, std::vector<unique_ptr<Sequence>> &reference){
+    int frag_size = (int)fragments.size();
+    int ref_size = (int)reference.size();
+    cerr << "Reference genome sequences: \n";
+    for (int i = 0; i < int(reference.size()); i++) {
+        std::cerr << "\t" << reference[i]->names.c_str() << ", length = " << reference[i]->all_data.size() << "\n";
+        cerr << "\n";
+    }
+    cerr << "Number of fragments: " << fragments.size() << "\n";
+    uint64_t len_sum = 0;
+    vector<size_t> lengths(fragments.size());
+    for (int i = 0; i < int(fragments.size()); i++) {
+    
+        lengths[i] = fragments[i]->all_data.size();
+        len_sum += lengths[i];
+    }
+    sort(lengths.begin(), lengths.end(), greater<size_t>());
+
+    uint64_t N50 = -1, tmp_sum = 0;
+    for (int i = 0; i < int(fragments.size()); i++) {
+    
+        tmp_sum += lengths[i];
+        if (tmp_sum * 2 >= len_sum) {
+            N50 = lengths[i];
+            break;
+        }
+    }
+
+    cerr << "Average length: " << len_sum * 1.0 / fragments.size() << "\n";
+    cerr << "N50 length: " << N50 << "\n";
+    cerr << "Minimal length: " << lengths.back() << "\n";
+    cerr << "Maximal length: " << lengths.front() << "\n";
+    
+    int sum = 0;
+    for (int i = 0; i < frag_size; i++) {
+        sum += fragments[i]->all_data.size();
+    } 
+    float avg_size = sum / frag_size;
+    std::vector<size_t> fragment_vector;
+    for (int i = 0; i < frag_size; i++) {
+        fragment_vector.push_back(fragments[i]->all_data.size());
+    }
+    std::sort(fragment_vector.begin(), fragment_vector.end());
+    fragment_vector.clear();
+
+}
+
+void mapping(unordered_map<unsigned int, vector<pair<unsigned int, bool>>> &reference_index, vector<unique_ptr<Sequence>> &fragments, vector<unique_ptr<Sequence>> &reference, int frag_begin, int frag_per_thread){
+    
+    string cigar;
+    string target = "";
+    ofstream MyFile("mapping.paf");
+    int target_len = 0;
+    int query_len = 0;
+    int align_score = 0;
+    unsigned int target_begin;
+    
+    for (int i = frag_begin; i < frag_per_thread; i++) {
+    //for (int i= 10; i < 20; i++){
+        std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> fragment_index;
+        //cout << fragments[i]->all_data.size() << "\n";
+        make_minimizer_index(fragments[i], fragment_index, true);
+        vector<tuple<bool, int, unsigned int>> result;
+        
+        best_match_cluster(fragment_index, reference_index, result);
+        
+
+        if (result.size() < 10){
+        	continue;
+        }
+
+        target_len =int(get<1>(result[0])) - int(get<1>(result[result.size()-1]));
+        query_len =int(get<2>(result[0])) - int(get<2>(result[result.size()-1]));  
+        //cout << query_len <<  "    "<< target_len << "\n";
+        
+        
+        auto query = fragments[i]->all_data.substr(int(get<2>(result[result.size()-1])), query_len);
+        
+        if (!(get<0>(result[0]))){
+            auto target_r = reference.front()->all_data.substr((reference.front()->all_data.size()) - int(get<1>(result[0])), target_len);
+            target = reverse_complement(target_r.c_str(), target_len);
+        }
+        else {
+            auto target_r = reference.front()->all_data.substr(int(get<1>(result[result.size()-1])), target_len);
+            target = target_r;
+        }
+        //cout << query <<  "\n"<< target << "\n";
+        
+        if (optimize && type == GLOBAL) {
+
+        	align_score = LinearnaSloz(query.c_str(), query_len, target.c_str(), target_len, match_cost, mismatch_cost, gap_cost, &cigar);
+    	} 
+    	else {
+        	align_score = Align(query.c_str(), query_len, target.c_str(), target_len, type, match_cost, mismatch_cost, gap_cost, &cigar, &target_begin);
+    	}
+    
+	cout << align_score << "\n";
+        
+        string res = paf_format(reference.front(), fragments[i], result, &cigar);
+
+        MyFile << res;    
+    }
+    MyFile.close();
+    
+}
+
+
+
 
 
 void display_version()
@@ -332,6 +454,8 @@ void display_help()
     std::cout << HELP
               << "\n";
 }
+
+//MAIN PROGRAM 
 
 int main(int argc, char *argv[])
 {
@@ -387,75 +511,6 @@ int main(int argc, char *argv[])
             exit(1);
         }
     }
-
-    if (optind < argc)
-    {
-        std::string path = argv[optind];   
-        
-    }
-	
-	auto ref = bioparser::Parser<Sequence>::Create<bioparser::FastaParser>(argv[argc - 2]);
-    auto reference = ref->Parse(-1);
-    int ref_size = (int)reference.size();
-
-    std::cerr << "Reference genome sequences: \n";
-    for (int i = 0; i < int(reference.size()); i++) {
-        std::cerr << "\t" << reference[i]->names.c_str() << ", length = " << reference[i]->all_data.size() << "\n";
-        cerr << "\n";
-    }
-
-    auto frag = bioparser::Parser<Sequence>::Create<bioparser::FastaParser>(argv[argc - 1]);
-    vector<unique_ptr<Sequence>> fragments = frag->Parse(-1);
-    int frag_size = (int)fragments.size();
-
-    cerr << "Number of fragments: " << fragments.size() << "\n";
-    uint64_t len_sum = 0;
-    vector<size_t> lengths(fragments.size());
-    for (int i = 0; i < int(fragments.size()); i++) {
-        lengths[i] = fragments[i]->all_data.size();
-        len_sum += lengths[i];
-    }
-    sort(lengths.begin(), lengths.end(), greater<size_t>());
-
-    uint64_t N50 = -1, tmp_sum = 0;
-    for (int i = 0; i < int(fragments.size()); i++) {
-        tmp_sum += lengths[i];
-        if (tmp_sum * 2 >= len_sum) {
-            N50 = lengths[i];
-            break;
-        }
-    }
-
-    cerr << "Average length: " << len_sum * 1.0 / fragments.size() << "\n";
-    cerr << "N50 length: " << N50 << "\n";
-    cerr << "Minimal length: " << lengths.back() << "\n";
-    cerr << "Maximal length: " << lengths.front() << "\n";
-    
-    int sum = 0;
-    for (int i = 0; i < frag_size; i++) {
-        sum += fragments[i]->all_data.size();
-    } 
-    float avg_size = sum / frag_size;
-    std::vector<size_t> fragment_vector;
-    for (int i = 0; i < frag_size; i++) {
-        fragment_vector.push_back(fragments[i]->all_data.size());
-    }
-    std::sort(fragment_vector.begin(), fragment_vector.end());
-
-    
-    
-    string cigar;
-    unsigned int target_begin;
-
-    
-    
-    srand(time(NULL));
-    int query_index = rand() % (frag_size);
-    int target_index = rand() % (frag_size);
-
-    //query_index = 0;
-    //target_index = 0;
-
     switch (algorithm)
     {
         case 0:
@@ -470,72 +525,45 @@ int main(int argc, char *argv[])
         default:
             break;
     }
-    //cout << "type: " << type << "\n";
-    cout << "\nAligning two random sequences: \n";
-    cout << "Target sequence:\n";
-    cout << fragments[target_index]->names.c_str() << "\n";
-    cout << "Query sequence: \n";
-    cout << fragments[query_index]->names.c_str() << "\n";
-    int align_score;
-    if (optimize && type == GLOBAL) {
-        align_score = LinearnaSloz(fragments[query_index]->all_data.c_str(), fragments[query_index]->all_data.size(),
-        fragments[target_index]->all_data.c_str(), fragments[target_index]->all_data.size(), match_cost, mismatch_cost, gap_cost, &cigar);
-    } else {
-        align_score = Align(fragments[query_index]->all_data.c_str(), fragments[query_index]->all_data.size(),
-                                                fragments[target_index]->all_data.c_str(),
-                                                fragments[target_index]->all_data.size(), type, match_cost, mismatch_cost, gap_cost, &cigar, &target_begin);
+
+    if (optind < argc)
+    {
+        std::string path = argv[optind];   
+        
     }
     
-    cout << "Alignment score: " << align_score << "\n";
-    if (cigar_flag) {
-        cout << "Cigar: " << cigar << "\n";
-    }
-    cout << "Target begin: " << target_begin << "\n";
-
-
-
-
-    std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> reference_index;
+    
+    //ucitavanje i parsiranje reference
+    auto ref = bioparser::Parser<Sequence>::Create<bioparser::FastaParser>(argv[argc - 2]);
+    auto reference = ref->Parse(-1);
+    
+    //stvaranje indeksa reference
+    unordered_map<unsigned int, vector<pair<unsigned int, bool>>> reference_index;
     make_reference_index(reference.front(), reference_index);
-        
     
-    string res = "";
-    for (int i = 1; i < 20; i++) {
-
-        std::unordered_map<unsigned int, std::vector<std::pair<unsigned int, bool>>> fragment_index;
-        //cout << fragments[i]->all_data.size() << "\n";
-        make_minimizer_index(fragments[i], fragment_index);
-        vector<tuple<bool, int, unsigned int>> match_cluster;
-        
-        cout << "Mapping fragments: \n";
-        
-        best_match_cluster(fragment_index, reference_index, match_cluster);
-        
-        
-        string res = paf_format(reference.front(), fragments[i], target_begin, true, &cigar);
-        cout << res;
-        //string paf = "";
-        //res = paf;
-    }
-
-    /*
-    thread_pool::ThreadPool thread_pool{};
-    vector<std::future<std::string>> ftrs;
+    //ucitavanje i parsiranje fragmenata
+    auto frag = bioparser::Parser<Sequence>::Create<bioparser::FastaParser>(argv[argc - 1]);
+    auto fragments = frag->Parse(-1);
+    
+    //ispis opcenitih podataka o referenci i fragmentima 
+    ispis_opcenito( fragments, reference);
+    
+    
     int frag_per_thread = int(fragments.size() / (double)thread_num);
     int frag_begin = 0;
-    for (int i = 0; i < (thread_num - 1); i++) {
-        ftrs.emplace_back(thread_pool.Submit(map_frags_to_ref, ref(fragments), ref(reference.front()), ref(reference_index), frag_begin, frag_per_thread));
-        frag_begin += frag_per_thread;
+    thread_pool::ThreadPool tp{};
+    std::vector<std::future<void>> f;
+    for (std::size_t i = 0; i < thread_num-1; ++i) {
+    	f.emplace_back(tp.Submit(mapping, std::ref(reference_index), std::ref(fragments), std::ref(reference), frag_begin, frag_per_thread));
+	frag_begin += frag_per_thread;
     }
-    ftrs.emplace_back(thread_pool.Submit(map_frags_to_ref, ref(fragments), ref(reference.front()), ref(reference_index), frag_begin, int(fragments.size())));
-
-    for (auto& f : ftrs) {
-        string final = f.get();
-        cout << final;
+    f.emplace_back(tp.Submit(mapping, std::ref(reference_index), std::ref(fragments), std::ref(reference), frag_begin, int(fragments.size()))); 
+    for (auto& it : f) {
+        it.get();
     }
-    */
     
 
     
+
     return 0;
 }
